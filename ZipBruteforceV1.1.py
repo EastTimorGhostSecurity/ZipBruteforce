@@ -1,23 +1,321 @@
 #!/usr/bin/env python3
-from Crypto.Cipher import AES
-import base64, zlib, sys
+import zipfile
+import rarfile
+import py7zr
+import tarfile
+import time
+from datetime import datetime
+import os
+import sys
+import signal
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from colorama import init, Fore, Back, Style
 
-# ---- INTERNAL KEY ----
-KEY = b'\xed\t\xab\x18\xef\xe3\xadw\r\xcd\x10;G{\xa9\x10^\x96P\xf9W\x81x\x1c\xfeB#\r\x8d\x9a\xff\x0b'
+# Initialize colorama
+init(autoreset=True)
 
-# ---- ENCRYPTED DATA ----
-ENCRYPTED = "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"
+class ArchiveCracker:
+    def __init__(self):
+        self.found = False
+        self.stats = {
+            'attempts': 0,
+            'start_time': 0,
+            'current_password': 'Starting...',
+            'speed': 0,
+            'progress': 0.0
+        }
+        signal.signal(signal.SIGINT, self.signal_handler)
+        
+        # Supported archive formats
+        self.supported_formats = {
+            '01': ('ZIP Archive', 'zip', self._try_zip),
+            '02': ('RAR Archive', 'rar', self._try_rar),
+            '03': ('7Z Archive', '7z', self._try_7z),
+            '04': ('TAR Archive', 'tar', self._try_tar),
+            '05': ('GZIP Archive', 'gz', self._try_gzip),
+            '06': ('BZIP2 Archive', 'bz2', self._try_bzip2)
+        }
+        
+        # Color schemes
+        self.colors = {
+            'header': Fore.YELLOW + Style.BRIGHT,
+            'menu': Fore.CYAN + Style.BRIGHT,
+            'option': Fore.GREEN + Style.BRIGHT,
+            'prompt': Fore.CYAN + Style.BRIGHT,
+            'success': Fore.GREEN + Style.BRIGHT,
+            'error': Fore.RED + Style.BRIGHT,
+            'warning': Fore.YELLOW + Style.BRIGHT,
+            'info': Fore.BLUE + Style.BRIGHT,
+            'progress': Fore.MAGENTA,
+            'stats': Fore.CYAN,
+            'password': Fore.WHITE + Back.BLACK + Style.BRIGHT,
+            'highlight': Fore.BLACK + Back.WHITE + Style.BRIGHT
+        }
 
-def decrypt():
-    try:
-        data = base64.b64decode(ENCRYPTED)
-        nonce, tag, ciphertext = data[:16], data[16:32], data[32:]
-        cipher = AES.new(KEY, AES.MODE_EAX, nonce)
-        decompressed = zlib.decompress(cipher.decrypt_and_verify(ciphertext, tag))
-        return decompressed.decode()
-    except Exception as e:
-        print("⛔ Error: Failed to decrypt script!")
-        sys.exit(1)
+    def signal_handler(self, sig, frame):
+        """Handle CTRL+C gracefully"""
+        print(f"\n{self.colors['error']}[!] Interrupted by user. Stopping...")
+        self.display_stats()
+        sys.exit(0)
 
-# Execute original code
-exec(decrypt())
+    def clear_screen(self):
+        """Clear the terminal screen"""
+        os.system('cls' if os.name == 'nt' else 'clear')
+
+    def show_banner(self):
+        """Display colorful banner with author info and description"""
+        self.clear_screen()
+        # Banner utama tanpa garis kotak
+        banner = f"""
+{Fore.RED}  ███████████  █████  █████ █████   ████   █████████  
+{Fore.YELLOW}  ░░███░░░░░███░░███  ░░███ ░░███   ███░   ███░░░░░███ 
+{Fore.GREEN}   ░███    ░███ ░███   ░███  ░███  ███    ░███    ░███ 
+{Fore.CYAN}   ░██████████  ░███   ░███  ░███████     ░███████████ 
+{Fore.BLUE}   ░███░░░░░███ ░███   ░███  ░███░░███    ░███░░░░░███ 
+{Fore.MAGENTA}   ░███    ░███ ░███   ░███  ░███ ░░███   ░███    ░███ 
+{Fore.WHITE}   ███████████  ░░████████   █████ ░░████ █████   █████
+{Fore.BLACK}   ░░░░░░░░░░░    ░░░░░░░░   ░░░░░   ░░░░ ░░░░░   ░░░░░ 
+
+"""
+        info_box = f"""
+{Fore.RED}╔══════════════════════════════════════════╗
+{Fore.RED}║ {self.colors['header']} Archive Password BruteForce Tool        {Fore.RED}║
+{Fore.RED}╠══════════════════════════════════════════╣
+{Fore.RED}║ {Fore.WHITE} Author: East Timor Ghost Security       {Fore.RED}║
+{Fore.RED}║ {Fore.WHITE} Version: 1.1                            {Fore.RED}║
+{Fore.RED}╚══════════════════════════════════════════╝
+{Style.RESET_ALL}
+"""
+        print(banner + info_box)
+
+    def select_archive_type(self):
+        """Show archive type selection menu"""
+        self.show_banner()
+        print(f"{self.colors['menu']}Select archive type:\n")
+        for code, (name, ext, _) in self.supported_formats.items():
+            print(f"{self.colors['option']}[{code}] {name} (.{ext})")
+        print(f"{self.colors['option']}[99] Exit\n")
+        while True:
+            choice = input(f"{self.colors['prompt']}[?] Select option: ").strip()
+            if choice in self.supported_formats:
+                return self.supported_formats[choice]
+            elif choice == '99':
+                sys.exit(0)
+            else:
+                print(f"{self.colors['error']}[!] Invalid choice. Please try again.")
+
+    def get_user_input(self, archive_type, ext):
+        """Get archive file and wordlist from user"""
+        self.show_banner()
+        print(f"{self.colors['info']}[+] Selected: {archive_type} (.{ext})\n")
+        while True:
+            archive_path = input(f"{self.colors['prompt']}[?] Path to .{ext} file: ").strip()
+            if not os.path.exists(archive_path):
+                print(f"{self.colors['error']}[!] File not found. Please try again.")
+                continue
+            if not archive_path.lower().endswith(f'.{ext}'):
+                print(f"{self.colors['warning']}[!] File extension doesn't match {ext} format")
+                confirm = input(f"{self.colors['prompt']}[?] Continue anyway? (y/N): ").lower()
+                if confirm != 'y':
+                    continue
+            break
+        while True:
+            wordlist = input(f"{self.colors['prompt']}[?] Path to wordlist: ").strip()
+            if os.path.exists(wordlist):
+                break
+            print(f"{self.colors['error']}[!] File not found. Please try again.")
+        while True:
+            try:
+                threads = input(f"{self.colors['prompt']}[?] Threads to use (1-16, default=4): ").strip()
+                threads = int(threads) if threads else 4
+                if 1 <= threads <= 16:
+                    break
+                print(f"{self.colors['error']}[!] Please enter value between 1-16")
+            except ValueError:
+                print(f"{self.colors['error']}[!] Invalid number")
+        return archive_path, wordlist, threads
+
+    def _try_zip(self, archive_path, password):
+        """Test password against ZIP archive"""
+        try:
+            with zipfile.ZipFile(archive_path) as archive:
+                archive.extractall(pwd=password.encode('utf-8'))
+            return True
+        except:
+            return False
+
+    def _try_rar(self, archive_path, password):
+        """Test password against RAR archive"""
+        try:
+            with rarfile.RarFile(archive_path) as archive:
+                archive.extractall(pwd=password)
+            return True
+        except:
+            return False
+
+    def _try_7z(self, archive_path, password):
+        """Test password against 7Z archive"""
+        try:
+            with py7zr.SevenZipFile(archive_path, password=password) as archive:
+                archive.extractall()
+            return True
+        except:
+            return False
+
+    def _try_tar(self, archive_path, password):
+        """Test password against TAR archive"""
+        try:
+            with tarfile.open(archive_path) as archive:
+                archive.extractall()
+            return True
+        except:
+            return False
+
+    def _try_gzip(self, archive_path, password):
+        """Test password against GZIP archive"""
+        try:
+            with tarfile.open(archive_path, 'r:gz') as archive:
+                archive.extractall()
+            return True
+        except:
+            return False
+
+    def _try_bzip2(self, archive_path, password):
+        """Test password against BZIP2 archive"""
+        try:
+            with tarfile.open(archive_path, 'r:bz2') as archive:
+                archive.extractall()
+            return True
+        except:
+            return False
+
+    def check_dependencies(self, ext):
+        """Check if required dependencies are installed"""
+        if ext == 'rar':
+            try:
+                import rarfile
+            except ImportError:
+                print(f"\n{self.colors['error']}[!] RAR support requires 'rarfile' and 'unrar'.")
+                print(f"{self.colors['info']}[+] Please install with: {Fore.WHITE}pip install rarfile")
+                print(f"{self.colors['info']}[+] On Linux, also install: {Fore.WHITE}sudo apt install unrar")
+                sys.exit(1)
+        if ext == '7z':
+            try:
+                import py7zr
+            except ImportError:
+                print(f"\n{self.colors['error']}[!] 7Z support requires 'py7zr'.")
+                print(f"{self.colors['info']}[+] Please install with: {Fore.WHITE}pip install py7zr")
+                sys.exit(1)
+
+    def _count_lines(self, file_path):
+        """Count lines in a file efficiently"""
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                return sum(1 for _ in f)
+        except:
+            return 0
+
+    def update_display(self, total_passwords):
+        """Update the display with current password being tested"""
+        elapsed = time.time() - self.stats['start_time']
+        speed = self.stats['attempts'] / elapsed if elapsed > 0 else 0
+        anim_char = "|/-\\"[self.stats['attempts'] % 4]
+        # Calculate progress percentage
+        progress = (self.stats['attempts'] / total_passwords) * 100 if total_passwords > 0 else 0
+        # Create progress bar
+        bar_length = 20
+        filled = int(bar_length * progress / 100)
+        bar = f"{Fore.GREEN}█" * filled + f"{Fore.WHITE}░" * (bar_length - filled)
+        # Display current password being tried
+        print(f"\r{self.colors['progress']}[+] Testing: {Fore.YELLOW}{anim_char} "
+              f"{self.colors['password']}{self.stats['current_password']:<25} "
+              f"{self.colors['stats']}Progress: {bar} {progress:.1f}% "
+              f"{self.colors['stats']}Speed: {Fore.WHITE}{speed:.1f}/sec", 
+              end="", flush=True)
+
+    def run_attack(self, archive_path, wordlist_path, test_func, threads=4):
+        """Execute the password attack with multithreading"""
+        self.show_banner()
+        print(f"{self.colors['info']}[+] Target: {Fore.WHITE}{archive_path}")
+        print(f"{self.colors['info']}[+] Wordlist: {Fore.WHITE}{wordlist_path}")
+        print(f"{self.colors['info']}[+] Threads: {Fore.WHITE}{threads}\n")
+        self.stats['start_time'] = time.time()
+        total_passwords = self._count_lines(wordlist_path)
+        found_password = None
+        try:
+            # Read all passwords into memory for accurate progress tracking
+            with open(wordlist_path, 'r', encoding='utf-8', errors='ignore') as f:
+                passwords = [line.strip() for line in f if line.strip()]
+                total_passwords = len(passwords)
+                with ThreadPoolExecutor(max_workers=threads) as executor:
+                    futures = []
+                    for password in passwords:
+                        if self.found:
+                            break
+                        # Update current password before testing
+                        self.stats['current_password'] = password
+                        self.stats['attempts'] += 1
+                        # Submit password test to thread pool
+                        futures.append(executor.submit(
+                            self._test_password_wrapper, 
+                            test_func, 
+                            archive_path, 
+                            password
+                        ))
+                        # Update display after each password submission
+                        self.update_display(total_passwords)
+                    # Check results as they complete
+                    for future in as_completed(futures):
+                        if future.result():
+                            self.found = True
+                            found_password = future.result()
+                            break
+            return found_password
+        except Exception as e:
+            print(f"\n{self.colors['error']}[!] Error: {str(e)}")
+            return None
+
+    def _test_password_wrapper(self, test_func, archive_path, password):
+        """Wrapper for password testing that returns password if successful"""
+        if test_func(archive_path, password):
+            return password
+        return None
+
+    def display_stats(self):
+        """Show final statistics"""
+        elapsed = time.time() - self.stats['start_time']
+        print(f"\n{self.colors['header']}[+] Attack summary:")
+        print(f"{self.colors['stats']}[+] {Fore.WHITE}Runtime: {Fore.CYAN}{elapsed:.2f} seconds")
+        print(f"{self.colors['stats']}[+] {Fore.WHITE}Total attempts: {Fore.CYAN}{self.stats['attempts']}")
+        if elapsed > 0:
+            print(f"{self.colors['stats']}[+] {Fore.WHITE}Average speed: {Fore.CYAN}{self.stats['attempts']/elapsed:.1f} attempts/sec")
+
+    def save_result(self, archive_path, password):
+        """Save successful result to file"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"recovered_password_{timestamp}.txt"
+        with open(filename, 'w') as f:
+            f.write(f"Archive: {archive_path}\n")
+            f.write(f"Password: {password}\n")
+            f.write(f"Found at: {datetime.now().isoformat()}\n")
+            f.write(f"Attempts: {self.stats['attempts']}\n")
+            f.write(f"Duration: {time.time() - self.stats['start_time']:.2f} seconds\n")
+        print(f"{self.colors['info']}[+] Results saved to: {Fore.WHITE}{filename}")
+
+    def run(self):
+        """Main execution flow"""
+        archive_type, ext, test_func = self.select_archive_type()
+        self.check_dependencies(ext)
+        archive_path, wordlist_path, threads = self.get_user_input(archive_type, ext)
+        password = self.run_attack(archive_path, wordlist_path, test_func, threads)
+        if password:
+            print(f"\n{self.colors['success']}[+] {Fore.WHITE}SUCCESS! Password found: {self.colors['password']}{password}")
+            self.save_result(archive_path, password)
+        else:
+            print(f"\n{self.colors['warning']}[-] {Fore.WHITE}Password not found in the wordlist")
+        self.display_stats()
+
+if __name__ == "__main__":
+    cracker = ArchiveCracker()
+    cracker.run()
+
