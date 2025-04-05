@@ -1,0 +1,6 @@
+pyzipper
+py7zr
+rarfile
+colorama
+pycryptodome
+
